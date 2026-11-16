@@ -22,35 +22,40 @@ export const KEVLAR_REDUCTION = 0.4;   // kevlar absorbs 40% of bullet damage
 
 // Weapons. damage = body damage per hit; head = damage * HEADSHOT_MULT.
 // spread = base radians; moveSpread = extra spread while moving; recoil = pitch kick per shot.
+// TUNED 2026-11-17: base spreads cut ~3x (0.014 -> 0.005 on the VK-47) so a
+// well-aimed shot at 15-35 m actually lands. A rifle that cannot hit a
+// standing man at 20 m is not a rifle. Bloom and recoil (sim.js) are tuned
+// to match, so sustained fire stays controllable instead of turning into a
+// shotgun after three shots.
 export const WEAPONS = {
   p9: {
     id: 'p9', name: 'P9 Sidearm', slot: 2, price: 0, auto: false,
     damage: 26, headMult: 2, rpm: 320, mag: 12, reserve: 36,
-    reload: 1.1, spread: 0.011, moveSpread: 0.02, recoil: 0.011, range: 60,
+    reload: 1.1, spread: 0.006, moveSpread: 0.012, recoil: 0.011, range: 60,
     desc: 'Reliable sidearm. Free, always in your holster.',
   },
   vk47: {
     id: 'vk47', name: 'VK-47 Rifle', slot: 1, price: 900, auto: true,
     damage: 34, headMult: 2, rpm: 600, mag: 30, reserve: 90,
-    reload: 2.2, spread: 0.014, moveSpread: 0.035, recoil: 0.02, range: 120,
+    reload: 2.2, spread: 0.005, moveSpread: 0.02, recoil: 0.016, range: 120,
     desc: 'Full-auto workhorse. Accurate when you stop to aim.',
   },
   hornet: {
     id: 'hornet', name: 'Hornet SMG', slot: 1, price: 600, auto: true,
     damage: 25, headMult: 2, rpm: 800, mag: 28, reserve: 84,
-    reload: 1.8, spread: 0.02, moveSpread: 0.03, recoil: 0.013, range: 70,
+    reload: 1.8, spread: 0.008, moveSpread: 0.018, recoil: 0.01, range: 70,
     desc: 'Fast close-quarters spray. Weak at long range.',
   },
   longshot: {
     id: 'longshot', name: 'Longshot DMR', slot: 1, price: 2400, auto: false,
     damage: 82, headMult: 2, rpm: 55, mag: 5, reserve: 15,
-    reload: 3.0, spread: 0.002, moveSpread: 0.05, recoil: 0.06, range: 200,
+    reload: 3.0, spread: 0.002, moveSpread: 0.03, recoil: 0.05, range: 200,
     desc: 'One-tap headshots. Slow, punishing if you miss.',
   },
   breacher: {
     id: 'breacher', name: 'Breacher Shotgun', slot: 1, price: 800, auto: false,
     damage: 12, headMult: 2, rpm: 70, mag: 6, reserve: 18, pellets: 8,
-    reload: 2.6, spread: 0.05, moveSpread: 0.04, recoil: 0.05, range: 25,
+    reload: 2.6, spread: 0.05, moveSpread: 0.03, recoil: 0.04, range: 25,
     desc: 'Eight pellets per shell. Devastating up close.',
   },
 };

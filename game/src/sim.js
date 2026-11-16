@@ -86,15 +86,19 @@ export function switchSlot(f, slot) {
 // --- movement ---------------------------------------------------------------
 // Acceleration + friction (no ice-skating), axis-separated wall collision,
 // crouch (slower, lower eye) and jump (vertical velocity + gravity).
+// TUNED 2026-11-17: snappier — accel 34 -> 40, friction 22 -> 26, speed
+// 4.6 -> 4.8. The old numbers felt stiff ("kaku"): the player took too long
+// to reach full speed and too long to stop. Bloom now decays fast when
+// still (-2.0/s) and recoil recovers faster (3.5/s), so a burst settles.
 export function moveFighter(match, f, mx, mz, dt) {
   if (!f.alive) return;
-  const speed = f.crouched ? 2.2 : 4.6;
+  const speed = f.crouched ? 2.4 : 4.8;
   const sin = Math.sin(f.yaw), cos = Math.cos(f.yaw);
   // input is in player-local space: forward = -z rotated by yaw
   const tx = (-sin * mz + cos * mx) * speed;
   const tz = (-cos * mz - sin * mx) * speed;
-  const accel = f.onGround ? 34 : 12;
-  const fric = f.onGround ? 22 : 2;
+  const accel = f.onGround ? 40 : 12;
+  const fric = f.onGround ? 26 : 2;
   const approach = (v, t) => {
     const d = t - v;
     const step = Math.max(-accel * dt, Math.min(accel * dt, d));
@@ -125,31 +129,42 @@ export function moveFighter(match, f, mx, mz, dt) {
   }
   // spread bloom: grows while moving or firing, decays when still
   const moving = Math.abs(f.vx) + Math.abs(f.vz) > 0.5;
-  f.spreadBloom = Math.max(0, f.spreadBloom + (moving ? 0.35 : -1.2) * dt);
-  f.recoilPitch = Math.max(0, f.recoilPitch - 2.2 * dt);
+  f.spreadBloom = Math.max(0, f.spreadBloom + (moving ? 0.35 : -2.0) * dt);
+  f.recoilPitch = Math.max(0, f.recoilPitch - 3.5 * dt);
 }
 
 // --- shooting ----------------------------------------------------------------
 // Hitscan. Returns a hit record { fighter, head, dist } or null. The ray is
 // tested against walls first (rayHitsWall), then against every enemy fighter's
 // body cylinder and head sphere; the nearest hit wins.
+// FIXED 2026-11-17 — two real bugs:
+// (1) the old code used `along = rx*dx + rz*dz` as the ray parameter, but
+// (dx, dz) has length cos(pitch), so `along` UNDERSTATED the true distance
+// by cos^2(pitch) and the height `yAt` was sampled too early — at steep
+// pitch the ray could pass a body it should have hit. Now `t` is the true
+// closest-approach parameter: (rx*dx + rz*dz) / (dx^2 + dz^2).
+// (2) the body box was y 0..1.55 while the eye sits at 1.7: a level shot
+// flew OVER the body and only the head sphere could catch it. The visual
+// soldier is ~1.85 tall, so the body is now y 0..1.7 and the head
+// y 1.5..1.95 — the hitbox finally matches the body you see.
 export function rayHitFighters(match, shooter, ox, oy, oz, dx, dy, dz, maxD) {
   const wallD = rayHitsWall(ox, oy, oz, dx, dy, dz, maxD);
+  const h2 = dx * dx + dz * dz;
   let best = null;
   for (const f of match.fighters) {
     if (!f.alive || f === shooter || f.team === shooter.team) continue;
-    // body: vertical segment y 0..1.55 at (f.x, f.z), radius 0.45
-    // head: sphere centre y 1.55, radius 0.24
+    // body: vertical segment y 0..1.7 at (f.x, f.z), radius 0.5
+    // head: sphere centre y ~1.7, spans 1.5..1.95
     const rx = f.x - ox, rz = f.z - oz;
-    const along = rx * dx + rz * dz; // horizontal distance along the ray
-    if (along < 0 || along > Math.min(wallD, maxD)) continue;
-    const px = ox + dx * along, pz = oz + dz * along;
+    const t = h2 > 1e-9 ? (rx * dx + rz * dz) / h2 : 0;
+    if (t < 0 || t > Math.min(wallD, maxD)) continue;
+    const px = ox + dx * t, pz = oz + dz * t;
     const ddx = px - f.x, ddz = pz - f.z;
     const radial = Math.sqrt(ddx * ddx + ddz * ddz);
-    const yAt = oy + dy * along;
+    const yAt = oy + dy * t;
     let hit = null;
-    if (radial < 0.48 && yAt >= 0 && yAt <= 1.55) hit = { fighter: f, head: false, dist: along };
-    else if (radial < 0.5 && yAt > 1.4 && yAt < 1.85) hit = { fighter: f, head: true, dist: along };
+    if (radial < 0.5 && yAt >= 0 && yAt <= 1.7) hit = { fighter: f, head: false, dist: t };
+    else if (radial < 0.5 && yAt > 1.5 && yAt < 1.95) hit = { fighter: f, head: true, dist: t };
     if (hit && (!best || hit.dist < best.dist)) best = hit;
   }
   return { hit: best, wallD };
@@ -169,7 +184,7 @@ export function fireWeapon(match, f) {
     const a = (Math.random() - 0.5) * 2 * spread;
     const b = (Math.random() - 0.5) * 2 * spread;
     const yaw = f.yaw + a;
-    const pitch = f.pitch + b + f.recoilPitch * 0.3;
+    const pitch = f.pitch + b + f.recoilPitch * 0.15;
     const dx = -Math.sin(yaw) * Math.cos(pitch);
     const dy = Math.sin(pitch);
     const dz = -Math.cos(yaw) * Math.cos(pitch);
@@ -183,10 +198,12 @@ export function fireWeapon(match, f) {
       damageFighter(match, hit.fighter, dmg, f, hit.head);
     }
   }
-  // recoil kicks the pitch up; spread blooms
-  f.pitch = Math.min(1.4, f.pitch + w.recoil * 0.55);
-  f.recoilPitch = Math.min(0.3, f.recoilPitch + w.recoil);
-  f.spreadBloom = Math.min(1, f.spreadBloom + 0.3);
+  // recoil kicks the pitch up; spread blooms — both now recover instead of
+  // stacking forever. Old bloom +0.3/shot capped at 1.0 after three shots
+  // and turned sustained fire into a shotgun; +0.08 keeps a burst tight.
+  f.pitch = Math.min(1.4, f.pitch + w.recoil * 0.3);
+  f.recoilPitch = Math.min(0.2, f.recoilPitch + w.recoil);
+  f.spreadBloom = Math.min(1, f.spreadBloom + 0.08);
   f.lastShotAt = match.time;
   // everyone nearby hears the shot (bots react to sound)
   for (const o of match.fighters) {
@@ -421,6 +438,9 @@ export function stepSim(match, input, dt) {
         f.reloading = 0;
       }
     }
+    // auto-reload: an empty magazine reloads on its own (players kept
+    // clicking a dead trigger and thinking the gun was broken).
+    if (f.mag <= 0 && f.reserve > 0 && f.reloading <= 0) startReload(f);
   }
   updateGrenades(match, dt);
   updateBomb(match, dt);

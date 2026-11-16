@@ -70,7 +70,7 @@ function canSee(match, bot, target) {
   if (d > SIGHT_RANGE) return false;
   const yawTo = angleTo(bot, target.x, target.z);
   if (Math.abs(angleDiff(yawTo, bot.yaw)) > 1.1 && d > 6) return false; // ~126° cone
-  const eyeY = 1.55;
+  const eyeY = 1.7; // the eye height fireWeapon actually shoots from (was 1.55: wrong)
   if (losBlocked(bot.x, eyeY, bot.z, target.x, 1.3, target.z)) return false;
   if (smokeBlocks(bot.x, eyeY, bot.z, target.x, 1.3, target.z, match.smokes)) return false;
   if (bot.flashUntil > match.time) return false;
@@ -148,29 +148,35 @@ function stepBot(match, b, dt) {
   if (b.target && tDist <= 16) {
     const t = b.target;
     const wantYaw = angleTo(b, t.x, t.z);
-    const wantPitch = Math.atan2(1.3 - 1.55, Math.hypot(t.x - b.x, t.z - b.z));
+    // aim at the chest (1.35) FROM the real eye height (1.7). The old code
+    // used 1.55 as the eye, so the ray started 0.15 higher than the aim
+    // assumed and flew over the target's chest at close range.
+    const wantPitch = Math.atan2(1.35 - 1.7, Math.hypot(t.x - b.x, t.z - b.z));
     // turn toward the target at a limited rate (bots are not aimbots)
     const turn = 3.2 * dt;
     const dy = angleDiff(wantYaw, b.yaw);
     b.yaw += Math.max(-turn, Math.min(turn, dy));
     b.pitch += Math.max(-turn, Math.min(turn, wantPitch - b.pitch));
-    // strafe a little while shooting so the fight moves
+    // strafe a little while shooting so the fight moves — slower now, so
+    // the bot's own movement spread stays small and its shots can land.
     const strafe = Math.sin(now * 0.9 + b.id.charCodeAt(3)) > 0 ? 0.5 : -0.5;
     // advance slowly while shooting: a fight that stands still at spawn is a bug
-    moveFighter(match, b, strafe * 0.4, 0.45, dt);
+    moveFighter(match, b, strafe * 0.25, 0.3, dt);
     // fire in bursts once the reaction delay has passed and the aim is close
     if (now >= (b.reactUntil || 0) && Math.abs(angleDiff(wantYaw, b.yaw)) < 0.12) {
       const w = currentWeapon(b);
       if (w && b.mag > 0 && b.fireCooldown <= 0) {
-        // bots are inaccurate: add a random aim error so the player can win
-        const err = (Math.random() - 0.5) * 0.09;
+        // bots are inaccurate — but the old error (±0.045 yaw / ±0.025
+        // pitch) was ~0.7 m at 16 m against a 0.5 m body: most shots
+        // missed by design. Halved: still human, now actually dangerous.
+        const err = (Math.random() - 0.5) * 0.04;
         const saveYaw = b.yaw, savePitch = b.pitch;
-        b.yaw += err; b.pitch += (Math.random() - 0.5) * 0.05;
+        b.yaw += err; b.pitch += (Math.random() - 0.5) * 0.024;
         fireWeapon(match, b);
         b.yaw = saveYaw; b.pitch = savePitch;
         // burst discipline: pause after a few shots
         b.burst = (b.burst || 0) + 1;
-        if (b.burst >= 4 + Math.floor(Math.random() * 3)) { b.burst = 0; b.fireCooldown = Math.max(b.fireCooldown, 0.55); }
+        if (b.burst >= 4 + Math.floor(Math.random() * 3)) { b.burst = 0; b.fireCooldown = Math.max(b.fireCooldown, 0.35); }
       } else if (w && b.mag <= 0) {
         // reload when empty
         if (b.reloading <= 0) { b.reloading = w.reload; }

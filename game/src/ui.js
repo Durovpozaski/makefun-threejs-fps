@@ -27,6 +27,7 @@ export class UI {
     this.buyOpen = false;
     this._edges = new Set();        // one-tick edge triggers
     this._feed = [];
+    this._dmgUntil = 0;             // damage vignette fade-out deadline
   }
 
   bind(canvas) {
@@ -178,8 +179,10 @@ export class UI {
     if (k.has('KeyS') || k.has('ArrowDown')) mz -= 1;
     if (k.has('KeyA') || k.has('ArrowLeft')) mx -= 1;
     if (k.has('KeyD') || k.has('ArrowRight')) mx += 1;
-    // mouse look: same sensitivity locked or free
-    const sens = 0.0023;
+    // mouse look: same sensitivity locked or free. TUNED 2026-11-17: 0.0023
+    // felt stiff ("kaku") — 0.0030 turns noticeably faster without losing
+    // fine aim at range.
+    const sens = 0.003;
     this.yaw -= this.mouseDX * sens;
     this.pitch -= this.mouseDY * sens;
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
@@ -288,8 +291,29 @@ export class UI {
   showHitmarker(head) {
     const h = $('hitmarker');
     h.classList.add('on');
-    h.style.background = '';
+    // headshots mark red, body hits amber — instant read on what landed
+    h.style.setProperty('--hm', head ? '#ff5d5d' : '#ffb02e');
     setTimeout(() => h.classList.remove('on'), 90);
+  }
+  // Damage feedback: a red vignette flashes and a red arc points at the
+  // shooter, so the player FEELS the hit and knows where it came from.
+  // fromX/fromZ are the attacker's world position (optional: centre flash).
+  showDamage(fromX, fromZ) {
+    const v = $('dmg-vignette');
+    if (v) { v.style.opacity = '1'; this._dmgUntil = performance.now() + 450; }
+    const dir = $('dmg-dir');
+    if (dir && fromX !== undefined && this.match) {
+      const p = this.match.fighters[0];
+      // angle of the attacker relative to where the player looks:
+      // 0 = straight ahead, positive = to the right
+      const toAtk = Math.atan2(-(fromX - p.x), -(fromZ - p.z));
+      let rel = toAtk - this.yaw;
+      while (rel > Math.PI) rel -= Math.PI * 2;
+      while (rel < -Math.PI) rel += Math.PI * 2;
+      dir.style.transform = `translate(-50%, -50%) rotate(${(-rel * 180) / Math.PI}deg)`;
+      dir.style.opacity = '1';
+      setTimeout(() => { dir.style.opacity = '0'; }, 700);
+    }
   }
   showBanner(win, sub) {
     const b = $('banner');
@@ -312,8 +336,17 @@ export class UI {
     $('phase-label').textContent = m.phase === 'buy' ? 'BUY' : m.phase === 'live' ? 'LIVE' : m.phase === 'ended' ? 'ROUND END' : 'MATCH OVER';
     $('alive-atk').textContent = m.fighters.filter((f) => f.alive && f.team === 'attack').length;
     $('alive-def').textContent = m.fighters.filter((f) => f.alive && f.team === 'defend').length;
-    $('health').textContent = Math.max(0, Math.ceil(player.hp));
+    // health: a real bar, not just a number. Green -> amber -> red, and the
+    // whole vitals block pulses when low. The old HUD only had the number,
+    // and damage never landed, so it never visibly changed.
+    const hp = Math.max(0, Math.ceil(player.hp));
+    $('health').textContent = hp;
     $('health').classList.toggle('low', player.hp <= 30);
+    const fill = $('health-fill');
+    if (fill) {
+      fill.style.width = hp + '%';
+      fill.style.background = hp > 50 ? '#7be495' : hp > 25 ? '#ffb02e' : '#ff5d5d';
+    }
     $('money').textContent = '$' + m.money;
     $('armor').textContent = player.kevlar ? '🛡 KEVLAR' : '';
     // ammo: current weapon (or grenade count on slot 3)
@@ -326,6 +359,24 @@ export class UI {
       $('ammo-name').textContent = w ? w.name : '—';
       $('ammo-mag').textContent = player.reloading > 0 ? '––' : player.mag;
       $('ammo-reserve').textContent = '/ ' + player.reserve;
+    }
+    // reload: a loud RELOADING badge with a progress bar, not just '––'.
+    // Players read the badge; the old '––' was invisible mid-fight.
+    const ri = $('reload-ind');
+    if (ri) {
+      if (player.reloading > 0) {
+        const w = player.slot === 1 ? WEAPONS[player.weapons.primary] : WEAPONS[player.weapons.secondary];
+        const total = w ? w.reload : 2;
+        const done = Math.max(0, Math.min(1, 1 - player.reloading / total));
+        ri.hidden = false;
+        const bar = $('reload-fill');
+        if (bar) bar.style.width = Math.round(done * 100) + '%';
+      } else ri.hidden = true;
+    }
+    // damage vignette fades out on its own
+    const v = $('dmg-vignette');
+    if (v && this._dmgUntil && performance.now() > this._dmgUntil) {
+      v.style.opacity = '0'; this._dmgUntil = 0;
     }
     // objective line
     const obj = $('objective');

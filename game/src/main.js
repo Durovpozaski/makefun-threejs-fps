@@ -142,6 +142,11 @@ let acc = 0;
 let lastPhase = match.phase;
 let lastBeepAt = 0;
 let flashUntil = 0;
+let prevReloading = 0;      // reload sound + dip trigger on the 0 -> >0 edge
+let lastDryFireAt = 0;      // throttle the empty-mag click
+let bobPhase = 0;           // viewmodel walk-bob phase
+let sway = 0;               // viewmodel sway from turning (decays)
+let prevYaw = 0;
 const prevHp = new Map();
 const prevAlive = new Map();
 for (const f of match.fighters) { prevHp.set(f.id, f.hp); prevAlive.set(f.id, f.alive); }
@@ -225,6 +230,14 @@ function frame(now) {
   // (auto weapons already fire while held inside stepSim)
 
   // --- audio + feedback from state changes -------------------------------------
+  // reload started: the click-clack was in the bank all along but never
+  // wired up — now the player HEARS the reload as well as seeing the badge.
+  if (player.reloading > 0 && prevReloading <= 0) audio.reload();
+  prevReloading = player.reloading;
+  // empty magazine: a dry click (throttled) instead of silence.
+  if (input.firing && player.mag <= 0 && player.reloading <= 0 && now - lastDryFireAt > 300) {
+    lastDryFireAt = now; audio.dryFire();
+  }
   for (const f of match.fighters) {
     const prev = prevHp.get(f.id);
     if (f.hp < prev) {
@@ -234,6 +247,10 @@ function frame(now) {
         if (!f.alive) audio.kill();
       } else if (f.id === 'player') {
         audio.hurt();
+        // the player must FEEL the hit: red vignette + an arc pointing at
+        // the shooter. The old HUD only changed a number nobody watched.
+        const atk = match.fighters.find((o) => o.id === f.lastDamageFrom);
+        if (atk) ui.showDamage(atk.x, atk.z); else ui.showDamage();
       }
     }
     if (prevAlive.get(f.id) && !f.alive && f.id === 'player') {
@@ -297,10 +314,30 @@ function frame(now) {
     camera.rotation.y = player.yaw;
     camera.rotation.x = player.pitch;
     camera.rotation.z = 0;
-    // recoil: the viewmodel kicks with the pitch
-    viewmodel.position.y = -0.24 + player.recoilPitch * 0.35;
-    viewmodel.position.z = -0.55 + player.recoilPitch * 0.2;
-    viewmodel.rotation.x = player.recoilPitch * 0.9;
+    // viewmodel life: a walk-bob while moving and a sway when turning, on
+    // top of the recoil kick. The old viewmodel was nailed to the camera —
+    // part of why the game felt stiff ("kaku"). Bob and sway are small and
+    // decay, so the aim itself never moves.
+    const speed = Math.hypot(player.vx, player.vz);
+    bobPhase += dt * speed * 1.9;
+    const bobAmp = Math.min(1, speed / 4.8) * 0.012;
+    const bobY = Math.abs(Math.sin(bobPhase)) * bobAmp;
+    const bobX = Math.sin(bobPhase) * bobAmp * 0.6;
+    const yawDelta = player.yaw - prevYaw;
+    prevYaw = player.yaw;
+    sway = sway * Math.max(0, 1 - dt * 8) - yawDelta * 0.35;
+    sway = Math.max(-0.05, Math.min(0.05, sway));
+    // recoil: the viewmodel kicks with the pitch — and dips while reloading.
+    // PLACEMENT 2026-11-17: raised (y -0.24 -> -0.05) and closer (z -0.55
+    // -> -0.48) so the big bare hands sit fully in frame like the top
+    // entries. The first raise (-0.17) still left the palms below the
+    // frame bottom at this depth; -0.05 puts the grip and both hands in
+    // the lower third, clearly visible, without covering the crosshair
+    // (the rifle sits right of centre).
+    const reloadDip = player.reloading > 0 ? -0.14 : 0;
+    viewmodel.position.set(0.2 + bobX + sway, -0.05 + player.recoilPitch * 0.35 + bobY + reloadDip, -0.48 + player.recoilPitch * 0.2);
+    viewmodel.rotation.x = player.recoilPitch * 0.9 + (player.reloading > 0 ? 0.5 : 0);
+    viewmodel.rotation.z = sway * 0.8;
   } else {
     // dead: third-person spectate chase camera (see render.js)
     const target = ui.spectateTarget();

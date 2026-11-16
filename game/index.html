@@ -26,7 +26,7 @@
   #crosshair .dot { left: 10px; top: 10px; width: 2px; height: 2px; }
   #hitmarker { position: fixed; left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; transition: opacity 90ms linear; }
   #hitmarker.on { opacity: 1; }
-  #hitmarker i { position: absolute; background: var(--accent); }
+  #hitmarker i { position: absolute; background: var(--hm, var(--accent)); }
   #hitmarker i:nth-child(1) { left: 14px; top: 0; width: 2px; height: 9px; }
   #hitmarker i:nth-child(2) { left: 14px; bottom: 0; width: 2px; height: 9px; }
   #hitmarker i:nth-child(3) { top: 14px; left: 0; height: 2px; width: 9px; }
@@ -44,8 +44,17 @@
   #ammo-name { font-size: 13px; color: var(--accent); margin-right: 6px; }
   #vitals { position: fixed; left: 28px; bottom: 22px; font-family: var(--font-readout); text-shadow: 0 2px 4px #000; }
   #health { font-size: 40px; font-weight: 700; } #health.low { color: var(--bad); }
+  #healthbar { width: 170px; height: 10px; margin: 2px 0 6px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35); border-radius: 5px; overflow: hidden; }
+  #health-fill { display: block; height: 100%; width: 100%; background: var(--good); transition: width 120ms linear; }
   #money { font-size: 18px; color: var(--accent); }
   #armor { font-size: 13px; color: var(--blue); }
+  #reload-ind { position: fixed; left: 50%; bottom: 200px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 16px; font-family: var(--font-readout); font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: 2px; text-align: center; }
+  #reload-ind[hidden] { display: none; }
+  #reload-track { width: 180px; height: 6px; margin-top: 6px; background: rgba(255,255,255,.18); border-radius: 3px; overflow: hidden; }
+  #reload-fill { display: block; height: 100%; width: 0%; background: var(--accent); }
+  #dmg-vignette { position: fixed; inset: 0; pointer-events: none; z-index: 6; opacity: 0; transition: opacity 350ms linear; background: radial-gradient(ellipse at center, transparent 42%, rgba(255,30,20,.55) 100%); }
+  #dmg-dir { position: fixed; left: 50%; top: 50%; width: 150px; height: 150px; margin: 0; pointer-events: none; z-index: 6; opacity: 0; transition: opacity 250ms linear; }
+  #dmg-dir::before { content: ""; position: absolute; left: 50%; top: -6px; transform: translateX(-50%); border-left: 16px solid transparent; border-right: 16px solid transparent; border-bottom: 26px solid rgba(255,45,35,.95); }
   #objective { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 16px; font-size: 15px; font-weight: 600; text-align: center; }
   #objective .bomb { color: var(--bad); }
   #hint { position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%); font-size: 13px; color: var(--muted); text-shadow: 0 1px 2px #000; }
@@ -89,6 +98,8 @@
 </head>
 <body>
 <div id="game"></div>
+<div id="dmg-vignette"></div>
+<div id="dmg-dir"></div>
 <div id="hud" aria-hidden="true">
   <div id="crosshair"><i></i><i></i><i></i><i></i><i class="dot"></i></div>
   <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
@@ -96,7 +107,8 @@
   <div id="teamline"><span class="atk">◈ SOLSTICE (you)</span> <b id="alive-atk">5</b> alive<br><span class="def">◆ DUSK WARDENS</span> <b id="alive-def">5</b> alive</div>
   <div id="feed"></div>
   <div id="ammo"><span id="ammo-name">VK-47</span><span id="ammo-mag">30</span><span id="ammo-reserve">/ 90</span></div>
-  <div id="vitals"><div id="health">100</div><div id="money">$800</div><div id="armor"></div></div>
+  <div id="vitals"><div id="health">100</div><div id="healthbar"><span id="health-fill"></span></div><div id="money">$800</div><div id="armor"></div></div>
+  <div id="reload-ind" hidden>RELOADING…<div id="reload-track"><span id="reload-fill"></span></div></div>
   <div id="objective" hidden></div>
   <div id="hint"><b>WASD</b> move · <b>Mouse</b> aim · <b>Click</b> fire · <b>R</b> reload · <b>1–4</b> weapons · <b>G</b> grenade · <b>E</b> plant/defuse · <b>B</b> buy · <b>Ctrl</b> crouch · <b>Space</b> jump</div>
   <div id="spectate" hidden></div>

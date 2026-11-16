@@ -33,73 +33,102 @@ export function createRenderer(container) {
 }
 
 // --- soldiers --------------------------------------------------------------
-// A humanoid soldier from boxes and cylinders: helmet with a bright glowing
-// visor, vest torso, arms holding a rifle with both hands, legs that walk.
-// Team colour is strong so enemies read instantly at small size.
+// REBUILT 2026-11-17 — the old soldier read as a chunky toy: a wide box
+// torso, a ball head, no silhouette. The new one is modelled on the top
+// entries (CAMPANILE's wide-brim hat + glowing visor, Kilnyard's clean
+// humanoid): slimmer and taller, a real brimmed helmet, a BIG bright visor
+// that reads at 30 m, a vest with pouches, a backpack, knee pads, and a
+// rifle with a stock, scope and foregrip held by both hands. Team colour
+// is strong (chest stripe, shoulder bands, helmet band, pack stripe) so
+// enemies read instantly at small (judge) size.
 export function makeSoldier(team) {
   const s = TEAM_STYLE[team];
   const cloth = new THREE.MeshStandardMaterial({ color: s.cloth, roughness: 0.85 });
   const dark = new THREE.MeshStandardMaterial({ color: s.dark, roughness: 0.8 });
-  const visor = new THREE.MeshStandardMaterial({ color: s.visor, emissive: s.visor, emissiveIntensity: 2.4 });
+  const visor = new THREE.MeshStandardMaterial({ color: s.visor, emissive: s.visor, emissiveIntensity: 3.0 });
+  const glow = new THREE.MeshStandardMaterial({ color: s.color, emissive: s.color, emissiveIntensity: 1.4 });
   const skin = new THREE.MeshStandardMaterial({ color: 0xc99878, roughness: 0.9 });
   const gun = new THREE.MeshStandardMaterial({ color: 0x22242a, roughness: 0.4, metalness: 0.6 });
+  const gunLight = new THREE.MeshStandardMaterial({ color: 0x4a4e57, roughness: 0.4, metalness: 0.6 });
   const g = new THREE.Group();
   const box = (w, h, d, mat, x, y, z) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z); m.castShadow = true; g.add(m); return m;
   };
-  // legs (pivot at the hip so the walk cycle can swing them)
-  const legL = new THREE.Group(); legL.position.set(-0.14, 0.85, 0);
-  const legR = new THREE.Group(); legR.position.set(0.14, 0.85, 0);
-  const llm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.85, 0.22), dark);
-  llm.position.y = -0.42; llm.castShadow = true; legL.add(llm);
-  const lrm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.85, 0.22), dark);
-  lrm.position.y = -0.42; lrm.castShadow = true; legR.add(lrm);
+  // legs — slimmer, longer, with knee pads (pivot at the hip for the walk cycle)
+  const legL = new THREE.Group(); legL.position.set(-0.13, 0.88, 0);
+  const legR = new THREE.Group(); legR.position.set(0.13, 0.88, 0);
+  const llm = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.88, 0.2), dark);
+  llm.position.y = -0.44; llm.castShadow = true; legL.add(llm);
+  const lrm = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.88, 0.2), dark);
+  lrm.position.y = -0.44; lrm.castShadow = true; legR.add(lrm);
+  // knee pads (front of the shin, team-dark)
+  const kl = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.16, 0.06), cloth);
+  kl.position.set(0, -0.5, 0.12); legL.add(kl);
+  const kr = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.16, 0.06), cloth);
+  kr.position.set(0, -0.5, 0.12); legR.add(kr);
+  // boots
+  box(0.19, 0.1, 0.3, dark, -0.13, 0.05, 0.03);
+  box(0.19, 0.1, 0.3, dark, 0.13, 0.05, 0.03);
   g.add(legL); g.add(legR);
-  // torso + vest with shoulder pads and pouches (clear silhouette)
-  box(0.62, 0.62, 0.34, cloth, 0, 1.18, 0);
-  box(0.66, 0.4, 0.4, dark, 0, 1.22, 0);
-  box(0.2, 0.12, 0.4, dark, -0.36, 1.47, 0);
-  box(0.2, 0.12, 0.4, dark, 0.36, 1.47, 0);
-  box(0.16, 0.16, 0.08, dark, -0.16, 1.16, 0.21);
-  box(0.16, 0.16, 0.08, dark, 0.16, 1.16, 0.21);
-  // team stripe across the chest (reads at distance) + bright shoulder bands
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.1, 0.42),
-    new THREE.MeshStandardMaterial({ color: s.color, emissive: s.color, emissiveIntensity: 0.7 }));
-  stripe.position.set(0, 1.38, 0); g.add(stripe);
-  const bandMat = new THREE.MeshStandardMaterial({ color: s.color, emissive: s.color, emissiveIntensity: 1.2 });
-  box(0.22, 0.09, 0.42, bandMat, -0.36, 1.53, 0);
-  box(0.22, 0.09, 0.42, bandMat, 0.36, 1.53, 0);
-  // head: big clear helmet with brim + WIDE bright visor (the face that reads far away)
-  const head = new THREE.Group(); head.position.set(0, 1.62, 0);
-  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.23, 14, 10), dark);
-  helm.scale.set(1, 0.92, 1); helm.castShadow = true; head.add(helm);
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.27, 0.05, 14), dark);
-  brim.position.set(0, 0.05, 0); head.add(brim);
-  const vis = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.08), visor);
-  vis.position.set(0, 0.0, 0.19); head.add(vis);
+  // torso — slimmer vest, with a belt, pouches and shoulder pads
+  box(0.56, 0.6, 0.32, cloth, 0, 1.2, 0);
+  box(0.6, 0.38, 0.38, dark, 0, 1.24, 0);          // vest plate
+  box(0.58, 0.09, 0.34, dark, 0, 0.92, 0);         // belt
+  box(0.18, 0.12, 0.38, dark, -0.33, 1.5, 0);      // shoulder pads
+  box(0.18, 0.12, 0.38, dark, 0.33, 1.5, 0);
+  box(0.15, 0.15, 0.07, dark, -0.15, 1.18, 0.2);   // pouches
+  box(0.15, 0.15, 0.07, dark, 0.15, 1.18, 0.2);
+  // backpack with a glowing team stripe (reads from behind too)
+  box(0.42, 0.5, 0.18, dark, 0, 1.28, -0.26);
+  box(0.44, 0.08, 0.2, glow, 0, 1.42, -0.26);
+  // team stripe across the chest + bright shoulder bands
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.4), glow);
+  stripe.position.set(0, 1.4, 0); g.add(stripe);
+  box(0.2, 0.08, 0.4, glow, -0.33, 1.56, 0);
+  box(0.2, 0.08, 0.4, glow, 0.33, 1.56, 0);
+  // head: brimmed helmet (wide, like the top entries) + a BIG bright visor
+  const head = new THREE.Group(); head.position.set(0, 1.68, 0);
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), dark);
+  helm.scale.set(1, 0.95, 1); helm.castShadow = true; head.add(helm);
+  // wide brim, tilted slightly forward — the silhouette that reads far away
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.33, 0.045, 16), dark);
+  brim.position.set(0, 0.06, 0); brim.rotation.x = 0.08; head.add(brim);
+  // glowing helmet band (team colour, wraps the helmet)
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.225, 0.225, 0.06, 16), glow);
+  band.position.set(0, 0.1, 0); head.add(band);
+  // the visor: wide, tall, blazing — the face of the enemy at any distance
+  const vis = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.17, 0.09), visor);
+  vis.position.set(0, -0.01, 0.18); head.add(vis);
   g.add(head);
   // arms: BOTH reach forward to the rifle — hands meet the weapon, not hanging down
-  const armL = new THREE.Group(); armL.position.set(-0.38, 1.42, 0);
-  const armR = new THREE.Group(); armR.position.set(0.38, 1.42, 0);
-  const alm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.55, 0.16), cloth);
-  alm.position.y = -0.26; alm.castShadow = true; armL.add(alm);
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.55, 0.16), cloth);
-  arm.position.y = -0.26; arm.castShadow = true; armR.add(arm);
+  const armL = new THREE.Group(); armL.position.set(-0.35, 1.44, 0);
+  const armR = new THREE.Group(); armR.position.set(0.35, 1.44, 0);
+  const alm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.56, 0.15), cloth);
+  alm.position.y = -0.27; alm.castShadow = true; armL.add(alm);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.56, 0.15), cloth);
+  arm.position.y = -0.27; arm.castShadow = true; armR.add(arm);
   // bare hands gripping the rifle (skin, like the viewmodel — readable, warm)
-  const hl = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.17, 0.17), skin); hl.position.y = -0.55; armL.add(hl);
-  const hr = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.17, 0.17), skin); hr.position.y = -0.55; armR.add(hr);
+  const hl = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.17, 0.16), skin); hl.position.y = -0.56; armL.add(hl);
+  const hr = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.17, 0.16), skin); hr.position.y = -0.56; armR.add(hr);
   armL.rotation.x = -1.05; armL.rotation.z = 0.35;
   armR.rotation.x = -1.05; armR.rotation.z = -0.35;
   g.add(armL); g.add(armR);
-  // rifle held across the chest, both hands on it
+  // rifle — bigger and more detailed: receiver, barrel, scope, stock, mag, foregrip
   const rifle = new THREE.Group();
-  const rBody = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.85), gun); rBody.castShadow = true; rifle.add(rBody);
-  const rBar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 8), gun);
-  rBar.rotation.x = Math.PI / 2; rBar.position.set(0, 0.02, -0.6); rifle.add(rBar);
-  const rMag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.22, 0.12), gun); rMag.position.set(0, -0.15, 0.05); rifle.add(rMag);
-  rifle.position.set(0.08, 1.12, 0.42); rifle.rotation.x = -0.12;
+  const rBody = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.13, 0.9), gun); rBody.castShadow = true; rifle.add(rBody);
+  const rBar = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.42, 8), gun);
+  rBar.rotation.x = Math.PI / 2; rBar.position.set(0, 0.02, -0.62); rifle.add(rBar);
+  const rScope = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.22), gunLight);
+  rScope.position.set(0, 0.11, -0.1); rifle.add(rScope);
+  const rStock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.28), gun);
+  rStock.position.set(0, -0.01, 0.55); rifle.add(rStock);
+  const rMag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.24, 0.12), gun); rMag.position.set(0, -0.16, 0.05); rifle.add(rMag);
+  const rGrip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.08), gunLight);
+  rGrip.position.set(0, -0.12, -0.3); rGrip.rotation.x = 0.4; rifle.add(rGrip);
+  rifle.position.set(0.06, 1.14, 0.44); rifle.rotation.x = -0.12;
   g.add(rifle);
+  g.scale.setScalar(1.04); // a touch larger: enemies must read at 768x480
   g.userData = { legL, legR, armL, armR, head, rifle, team };
   return g;
 }
