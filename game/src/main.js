@@ -17,7 +17,11 @@ window.addEventListener('error', (e) => { window.__solsticeErrors = window.__sol
 const audio = new AudioBank();
 const match = createSim();
 const { renderer, scene, camera } = createRenderer(document.getElementById('game'));
-const viewmodel = makeViewmodel(camera);
+// ROUND 2: the viewmodel is rebuilt when the equipped weapon changes kind
+// (rifle = two-hand hold, pistol = one-hand hold) — each weapon gets its
+// own grip pose, per the hand brief. `let`, not `const`, so the swap works.
+let viewmodel = makeViewmodel(camera, 'rifle');
+let vmKind = 'rifle';
 const fx = makeEffects(scene);
 
 // one soldier mesh per fighter, created once and reused (no per-frame allocation)
@@ -201,8 +205,9 @@ function frame(now) {
   const dtMs = Math.min(250, now - lastTime);
   lastTime = now;
   const dt = dtMs / 1000;
-  // sample input once per frame; edge triggers apply to the first tick only
-  const input = ui.getInput();
+  // sample input once per frame; edge triggers apply to the first tick only.
+  // dt is passed so free-cursor edge steering turns at a real rate.
+  const input = ui.getInput(dt);
   const player = match.fighters[0];
   const held = { ...input, reload: false, throwGrenade: false, cycleGrenade: false, switchSlot: 0, jump: false, fireEdge: false };
   acc += dt;
@@ -225,6 +230,15 @@ function frame(now) {
   } else if (input.switchSlot === 4) {
     // slot 4: knife (not a weapon) — fall back to pistol
     switchSlot(player, 2);
+  }
+  // per-weapon viewmodel: the pistol gets its own one-hand pose, the long
+  // guns share the two-hand rifle pose. Rebuild only when the kind changes.
+  const cw = currentWeapon(player);
+  const wantKind = (cw && cw.id === 'p9') ? 'pistol' : 'rifle';
+  if (wantKind !== vmKind) {
+    camera.remove(viewmodel);
+    viewmodel = makeViewmodel(camera, wantKind);
+    vmKind = wantKind;
   }
   // semi-auto weapons fire only on the click edge, not while held
   // (auto weapons already fire while held inside stepSim)
@@ -328,16 +342,25 @@ function frame(now) {
     sway = sway * Math.max(0, 1 - dt * 8) - yawDelta * 0.35;
     sway = Math.max(-0.05, Math.min(0.05, sway));
     // recoil: the viewmodel kicks with the pitch — and dips while reloading.
-    // PLACEMENT 2026-11-17: raised (y -0.24 -> -0.05) and closer (z -0.55
-    // -> -0.48) so the big bare hands sit fully in frame like the top
-    // entries. The first raise (-0.17) still left the palms below the
-    // frame bottom at this depth; -0.05 puts the grip and both hands in
-    // the lower third, clearly visible, without covering the crosshair
-    // (the rifle sits right of centre).
     const reloadDip = player.reloading > 0 ? -0.14 : 0;
     viewmodel.position.set(0.2 + bobX + sway, -0.05 + player.recoilPitch * 0.35 + bobY + reloadDip, -0.48 + player.recoilPitch * 0.2);
     viewmodel.rotation.x = player.recoilPitch * 0.9 + (player.reloading > 0 ? 0.5 : 0);
     viewmodel.rotation.z = sway * 0.8;
+    // reload motion: the support hand travels to the magazine and the mag
+    // dips out and back in. k = 0 at the ends, 1 mid-reload.
+    const ud = viewmodel.userData;
+    if (ud.handL && ud.handLBase) {
+      const w2 = currentWeapon(player);
+      const total = w2 ? w2.reload : 2;
+      const prog = player.reloading > 0 ? 1 - player.reloading / total : 0;
+      const k = Math.sin(Math.max(0, Math.min(1, prog)) * Math.PI);
+      ud.handL.position.set(
+        ud.handLBase.x + (0 - ud.handLBase.x) * k,
+        ud.handLBase.y + (-0.20 - ud.handLBase.y) * k,
+        ud.handLBase.z + (-0.10 - ud.handLBase.z) * k
+      );
+      if (ud.mag) ud.mag.position.y = ud.magBaseY - 0.10 * k;
+    }
   } else {
     // dead: third-person spectate chase camera (see render.js)
     const target = ui.spectateTarget();

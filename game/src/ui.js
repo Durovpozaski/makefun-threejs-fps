@@ -28,6 +28,7 @@ export class UI {
     this._edges = new Set();        // one-tick edge triggers
     this._feed = [];
     this._dmgUntil = 0;             // damage vignette fade-out deadline
+    this._lastLockRetry = 0;        // throttle for re-requesting pointer lock
   }
 
   bind(canvas) {
@@ -55,6 +56,11 @@ export class UI {
   // modes, one fallback: a throwing requestPointerLock, a rejected lock
   // promise, and the pointerlockerror event. Any of them switches to
   // free-cursor aiming at the same sensitivity, with a persistent hint.
+  // ROUND 2: a lock request that neither succeeds nor fails (browser
+  // cooldown after Esc, or a permission prompt) used to leave the player
+  // stuck in lockMode 'none' with NO mouse look at all — that is the
+  // "WASD ngaco" feeling. A 600 ms timeout now falls back to free mode,
+  // so the player is never left without a working view.
   requestLock() {
     const el = this.canvas;
     try {
@@ -65,6 +71,11 @@ export class UI {
     } catch (err) {
       this.useFreeCursor('request threw');
     }
+    setTimeout(() => {
+      if (document.pointerLockElement !== this.canvas && this.lockMode === 'none') {
+        this.useFreeCursor('lock timeout');
+      }
+    }, 600);
   }
   onLockChange() {
     const nowLocked = document.pointerLockElement === this.canvas;
@@ -165,6 +176,17 @@ export class UI {
     if (this.buyOpen) return;
     // Dead: a click cycles the spectate target instead of firing.
     if (this.match && !this.match.fighters[0].alive) { this.cycleSpectate(); return; }
+    // ROUND 2: in free-cursor mode a game click also re-tries pointer lock
+    // (throttled) — the lock may have failed on Play because of the browser
+    // cooldown after an earlier Esc, and a later click is a fresh gesture
+    // that can succeed. This is how a player gets back to locked aiming.
+    if (this.lockMode === 'free') {
+      const now = performance.now();
+      if (now - this._lastLockRetry > 1500) {
+        this._lastLockRetry = now;
+        this.requestLock();
+      }
+    }
     this.firing = true;
     this.fireEdge = true;
     // In free-cursor mode a click also (re)arms looking; nothing else needed.
@@ -172,21 +194,37 @@ export class UI {
 
   // Build the player's intent for one sim tick. Called by main.js every tick.
   // Edge triggers are consumed here (one tick each).
-  getInput() {
+  // ROUND 2: free-cursor edge steering. Without pointer lock the cursor
+  // stops at the screen edge, so the view could never turn a full 360° —
+  // the player could not look where they wanted to go, and WASD felt
+  // "ngaco" (wrong). Now, holding the cursor near an edge keeps turning
+  // the view at up to 2.4 rad/s, so a full turn is always possible.
+  // dt is the frame time (main.js passes it); the steering is a rate.
+  getInput(dt = 1 / 60) {
     const k = this.keys;
     let mx = 0, mz = 0;
     if (k.has('KeyW') || k.has('ArrowUp')) mz += 1;
     if (k.has('KeyS') || k.has('ArrowDown')) mz -= 1;
     if (k.has('KeyA') || k.has('ArrowLeft')) mx -= 1;
     if (k.has('KeyD') || k.has('ArrowRight')) mx += 1;
-    // mouse look: same sensitivity locked or free. TUNED 2026-11-17: 0.0023
-    // felt stiff ("kaku") — 0.0030 turns noticeably faster without losing
-    // fine aim at range.
-    const sens = 0.003;
+    // mouse look: faster in free mode (no lift-and-recentre), same feel locked.
+    const sens = this.lockMode === 'free' ? 0.0038 : 0.003;
     this.yaw -= this.mouseDX * sens;
     this.pitch -= this.mouseDY * sens;
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
     this.mouseDX = 0; this.mouseDY = 0;
+    // free-cursor edge steering: hold the cursor near an edge to keep turning
+    if (this.lockMode === 'free' && this._lastMX !== undefined) {
+      const w = window.innerWidth, h = window.innerHeight;
+      const edge = 90, maxRate = 2.4;
+      let turn = 0, pitchTurn = 0;
+      if (this._lastMX < edge) turn = ((edge - this._lastMX) / edge) * maxRate;
+      else if (this._lastMX > w - edge) turn = -((this._lastMX - (w - edge)) / edge) * maxRate;
+      if (this._lastMY < edge) pitchTurn = ((edge - this._lastMY) / edge) * maxRate;
+      else if (this._lastMY > h - edge) pitchTurn = -((this._lastMY - (h - edge)) / edge) * maxRate;
+      this.yaw += turn * dt;
+      this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + pitchTurn * dt));
+    }
     const e = this._edges;
     let slot = 0;
     if (e.has('slot1')) slot = 1;
@@ -264,7 +302,7 @@ export class UI {
     if (m.phase !== 'buy') { this.audio.denied(); return; } // purchases re-check the phase
     if (m.money < it.price) { this.audio.denied(); return; }
     if (it.kind === 'weapon') {
-      if (player.weapons.primary === it.id) return;
+      if (player.weapons.primary === id) return;
       m.money -= it.price;
       player.weapons.primary = it.id;
       player.slot = 1;
