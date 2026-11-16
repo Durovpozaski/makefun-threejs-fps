@@ -253,9 +253,11 @@ export function spectateCamera(camera, target, aimPoint) {
   const eyeY = (target.crouched ? CROUCH_HEIGHT : PLAYER_HEIGHT) + 0.05;
   const ex = target.x, ey = eyeY, ez = target.z;
   const fx = -Math.sin(target.yaw), fz = -Math.cos(target.yaw);
-  const ax = aimPoint ? aimPoint.x : ex + fx * 8;
-  const ay = aimPoint ? aimPoint.y : ey + target.pitch * -4;
-  const az = aimPoint ? aimPoint.z : ez + fz * 8;
+  // aim AT the teammate's chest: the chase camera looks at the soldier, not
+  // 8 m past them (a ray that far always crosses what they face and reads blocked)
+  const ax = aimPoint ? aimPoint.x : ex;
+  const ay = aimPoint ? aimPoint.y : 1.35;
+  const az = aimPoint ? aimPoint.z : ez;
   for (const back of [2.2, 1.5, 0.8, 0.3]) {
     const cx = ex - fx * back, cy = ey + 0.9, cz = ez - fz * back;
     if (!isFinite(cx) || !isFinite(cy) || !isFinite(cz)) continue;
@@ -269,8 +271,9 @@ export function spectateCamera(camera, target, aimPoint) {
     camera.lookAt(ax, ay, az);
     return true;
   }
-  // boxed in: fall back to the eye position
-  camera.position.set(ex, ey, ez);
-  camera.lookAt(ax, ay, az);
+  // boxed in (teammate's back flat against a wall): go overhead — above the
+  // cover, looking down at the soldier — never a wall filling the frame
+  camera.position.set(ex + 1.2, ey + 2.8, ez + 1.2);
+  camera.lookAt(ex, 1.3, ez);
   return true;
 }

@@ -134,7 +134,11 @@ export class UI {
     if (e.code === 'Digit2') this._edges.add('slot2');
     if (e.code === 'Digit3') this._edges.add('slot3');
     if (e.code === 'Digit4') this._edges.add('slot4');
-    if (e.code === 'KeyQ') this._edges.add('slotQ');
+    if (e.code === 'KeyQ') {
+      // Dead: Q cycles the spectate target; alive: Q is last-weapon.
+      if (this.match && !this.match.fighters[0].alive) this.cycleSpectate();
+      else this._edges.add('slotQ');
+    }
     if (e.code === 'KeyB') this._edges.add('toggleBuy');
     if (e.code === 'Space') { this._edges.add('jump'); e.preventDefault(); }
     if (e.code === 'ControlLeft' || e.code === 'ControlRight') e.preventDefault();
@@ -158,6 +162,8 @@ export class UI {
     if (e.target && e.target.closest && e.target.closest('button, .overlay, .buy-item')) return;
     if (!$('start').hidden || !$('pause').hidden) return;
     if (this.buyOpen) return;
+    // Dead: a click cycles the spectate target instead of firing.
+    if (this.match && !this.match.fighters[0].alive) { this.cycleSpectate(); return; }
     this.firing = true;
     this.fireEdge = true;
     // In free-cursor mode a click also (re)arms looking; nothing else needed.

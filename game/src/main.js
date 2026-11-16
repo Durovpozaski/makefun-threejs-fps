@@ -305,7 +305,7 @@ function frame(now) {
     // dead: third-person spectate chase camera (see render.js)
     const target = ui.spectateTarget();
     if (target) {
-      const aim = { x: target.x - Math.sin(target.yaw) * 8, y: 1.4, z: target.z - Math.cos(target.yaw) * 8 };
+      const aim = { x: target.x, y: 1.35, z: target.z };
       spectateCamera(camera, target, aim);
     }
   }
